@@ -6,49 +6,45 @@
     Example: Set-ADDescription -CompEnv TS      # This will set the Computer Description via a Task Sequence and set the TS Variable.
 #>
 
-function Set-ADDescription{
+function Get-ExpirationType {
     param(
-        [parameter(Mandatory=$true)][validateset('Local','TS')][string]$CompEnv,
-        [parameter(Mandatory=$true)][validateset('AssetTag','Warranty')][string]$ExpType,
-        [parameter][string]$RegLoc = 'HKLM:\SOFTWARE\CustomInv'
+        [parameter(Mandatory=$true)][string]$RegLoc,
+        [parameter(Mandatory=$true)][validateset('AssetTag','WarrantyEndDate')][string]$ExpType
     )
     
-    
-    if(!(Test-Path -Path $RegLoc)){
+    if(!(Test-Path -Path $RegLoc)){ ## Test for Registry Location
         Write-Error "Cannot find location $RegLoc"
         Exit 1
     }
-    
-    
-    if($CompEnv -eq 'Local'){
+
+    if(!(Get-ItemProperty -Path $RegLoc | Select-Object $ExpType)){ ## Look for Asset Tag in Registry
+        Write-Error "$ExpType not found at $RegLoc."
+        Exit 1
+    }
+
+    $Exp = (Get-ItemProperty -Path $RegLoc).$ExpType
+    Return $Exp
+}
+
+function Set-ADDescription{
+    param(
+        [parameter(Mandatory=$true)][validateset('Local','TS')][string]$CompEnv,
+        [parameter(Mandatory=$true)][string]$SiteCode,
+        [parameter(Mandatory=$true)][string]$Exp
+    )
+     
+    if($CompEnv -eq 'Local'){ ## use Parameter to determine whether in TS or not
         $CompName = $env:COMPUTERNAME
     }else{
         $CompName = $sAMCompName
     }
 
-    if(!(Get-ItemProperty -Path $RegLoc | Select-Object AssetTag)){
-        Write-Error "Asset Tag not found at $RegLoc."
-        Exit 1
-    }
-
-    if(!(Get-ItemProperty -Path $RegLoc | Select-Object WarrantyEndDate)){
-        Write-Error "Warranty End Date not found at $RegLoc."
-        Exit 1
-    }
-
-    if($ExpType -eq 'AssetTag'){
-        $Exp = (Get-ItemProperty -Path $RegLoc).AssetTag
-    }else{
-        $Exp = (Get-ItemProperty -Path $RegLoc).WarrantyEndDate
-    }
-
     $BIOS = Get-CimInstance -ClassName Win32_SystemEnclosure
     $SN = $BIOS.SerialNumber
-    $SiteCode = (Get-ItemProperty -Path $RegLoc).SiteCode
     $ComputerDn = ([ADSISEARCHER]"sAMAccountName=$($CompName)$").FindOne().Path
     $ADComputer = [ADSI]$ComputerDn
     
-    if($CompName -match "[DHS]$SN"){
+    if($CompName -match "[DHS]$SN"){ ## RegEx to determine if new naming convention
         $ADComputer.description = "Site: $SiteCode | Exp: $Exp"
     }Else{
         $ADComputer.description = "SN: $SN | Exp: $Exp"
@@ -56,18 +52,29 @@ function Set-ADDescription{
     $ADComputer.SetInfo()
 }
 
-$BIOS.Manufacturer
+$BIOS = Get-CimInstance -ClassName Win32_SystemEnclosure
+$Manufacturer = $BIOS.Manufacturer
+$RegLoc = 'HKLM:\SOFTWARE\CustomInv'
+$SiteCode = (Get-ItemProperty -Path $RegLoc).SiteCode
+
+switch($Manufacturer){
+    'Dell'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'WarrantyEndDate'}
+    'HP'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'AssetTag'}
+    'Lenovo'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'WarrantyEndDate'}
+    'Microsoft'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'WarrantyEndDate'}
+}
+
+
 
 [string]$Description = $args[0]
 
-    try {
-        $TSEnv = New-Object -ComObject Microsoft.SMS.TSEnvironment
-        $TSEnv.Value("OSDComputerName") = $env:COMPUTERNAME
-        $sAMCompName = $TSEnv.Value("OSDComputerName")        
-        Set-ADDescription -CompEnv TS
-        Write-Host("Setting the Active Directory Computer Description in a Task Sequence Environment to $($ADComputer.description)")
-    }
-    catch {
-        Set-ADDescription -CompEnv Local
-        Write-Host("Setting the Active Directory Computer Description Locally to $($ADComputer.description)")
-    }
+try {
+    $TSEnv = New-Object -ComObject Microsoft.SMS.TSEnvironment
+    $TSEnv.Value("OSDComputerName") = $env:COMPUTERNAME
+    $sAMCompName = $TSEnv.Value("OSDComputerName")        
+    Set-ADDescription -CompEnv TS -SiteCode $SiteCode -Exp $Exp
+    Write-Host("Setting the Active Directory Computer Description in a Task Sequence Environment to $($ADComputer.description)")
+}catch {
+    Set-ADDescription -CompEnv Local -SiteCode $SiteCode -Exp $Exp
+    Write-Host("Setting the Active Directory Computer Description Locally to $($ADComputer.description)")
+}
