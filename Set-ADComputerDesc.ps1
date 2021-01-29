@@ -74,8 +74,8 @@ try {
     $TSEnv.Value("OSDComputerName") = $env:COMPUTERNAME
     $sAMCompName = $TSEnv.Value("OSDComputerName")        
     Set-ADDescription -CompEnv TS -SiteCode $SiteCode -Exp $Exp
-    Write-Host("Setting the Active Directory Computer Description in a Task Sequence Environment to $($ADComputer.description)")
+    Write-Output "Setting the Active Directory Computer Description in a Task Sequence Environment"
 }catch {
     Set-ADDescription -CompEnv Local -SiteCode $SiteCode -Exp $Exp
-    Write-Host("Setting the Active Directory Computer Description Locally to $($ADComputer.description)")
+    Write-Output "Setting the Active Directory Computer Description Locally"
 }
