@@ -58,7 +58,7 @@ $RegLoc = 'HKLM:\SOFTWARE\CustomInv'
 $SiteCode = (Get-ItemProperty -Path $RegLoc).SiteCode
 
 switch($Manufacturer){
-    'Dell'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'WarrantyEndDate'}
+    'Dell Inc.'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'WarrantyEndDate'}
     'HP'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'AssetTag'}
     'Lenovo'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'WarrantyEndDate'}
     'Microsoft'{$Exp = Get-ExpirationType -RegLoc $RegLoc -ExpType 'WarrantyEndDate'}
